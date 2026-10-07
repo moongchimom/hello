@@ -1,0 +1,14 @@
+# 빌드 컨텍스트 축소. target/*.war 는 반드시 남겨야 하므로
+# "*" 전체 제외 + "!" 되살리기는 쓰지 않는다 (상위 디렉터리 제외는 ! 로 복구 불가).
+.git
+.github
+.settings
+.vscode
+.classpath
+.project
+src
+target/classes
+target/test-classes
+target/maven-archiver
+target/maven-status
+target/surefire-reports
