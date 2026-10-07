@@ -1,4 +1,4 @@
-name: 전자정부프레임워크 빌드 및 배포
+name: WAR 직접 배포 (호스트 톰캣)
 
 on:
   push:
@@ -23,69 +23,40 @@ jobs:
     - name: 메이븐 빌드 (WAR 패키징)
       run: mvn -B clean package -DskipTests
 
-    - name: Docker 로그인
-      uses: docker/login-action@v3
+    - name: EC2로 WAR 파일 전송 (SCP)
+      uses: appleboy/scp-action@v1.0.0
       with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
+        host: ${{ secrets.EC2_EGOV_HOST }}
+        username: ${{ secrets.EC2_EGOV_USERNAME }}
+        key: ${{ secrets.EC2_EGOV_KEY }}
+        source: "target/hello-1.0.0.war"
+        target: "/home/ubuntu"
+        strip_components: 1
 
-    - name: Buildx 세팅
-      uses: docker/setup-buildx-action@v3
-
-    - name: 이미지 빌드 및 푸시
-      uses: docker/build-push-action@v6
-      with:
-        context: .
-        push: true
-        tags: |
-          ${{ secrets.DOCKER_USERNAME }}/hello:latest
-          ${{ secrets.DOCKER_USERNAME }}/hello:${{ github.sha }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-
-    - name: EC2 배포 (컨테이너 교체)
+    - name: 원격 배포 및 톰캣 재기동 (SSH)
       uses: appleboy/ssh-action@v1.2.5
       with:
         host: ${{ secrets.EC2_EGOV_HOST }}
         username: ${{ secrets.EC2_EGOV_USERNAME }}
         key: ${{ secrets.EC2_EGOV_KEY }}
         script: |
-          set -e
-          IMAGE="${{ secrets.DOCKER_USERNAME }}/hello:${{ github.sha }}"
+          # 0. docker.yml 로 띄운 컨테이너가 있으면 먼저 내린다 (80 포트 선점 해제)
+          if command -v docker >/dev/null; then
+            sudo docker rm -f hello 2>/dev/null || true
+          fi
 
-          command -v docker >/dev/null \
-            || { echo "ERROR: EC2에 Docker가 설치돼 있지 않습니다."; exit 1; }
+          # 1. 기존 톰캣 중지
+          #    안 떠 있으면 shutdown.sh 가 8005 접속 실패 스택트레이스를 남기므로 버린다.
+          #    (톰캣을 ubuntu 권한으로 돌리고 있으므로 여기에 sudo 를 붙이지 않는다)
+          /opt/tomcat9/bin/shutdown.sh >/dev/null 2>&1 || true
+          sleep 2
+          pkill -f tomcat || true
 
-          # 1. 기존 방식으로 호스트에 설치된 톰캣 중지 (배포 경로 일원화)
-          sudo systemctl stop tomcat9 2>/dev/null || true
-          sudo systemctl disable tomcat9 2>/dev/null || true
-          sudo /opt/tomcat9/bin/shutdown.sh 2>/dev/null || true
+          # 2. 기존 ROOT 정리
+          rm -rf /opt/tomcat9/webapps/ROOT /opt/tomcat9/webapps/ROOT.war
 
-          # 2. 이미지 받기
-          echo "${{ secrets.DOCKER_PASSWORD }}" \
-            | sudo docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-          sudo docker pull "$IMAGE"
+          # 3. 새로 전송된 WAR 파일을 ROOT.war로 이동
+          mv /home/ubuntu/hello-1.0.0.war /opt/tomcat9/webapps/ROOT.war
 
-          # 3. 컨테이너 교체
-          #    DB를 라우팅 가능한 IP로 접속하므로 host 네트워크가 불필요하다.
-          #    기본 bridge + 포트 매핑을 쓰고 호스트 80 포트로 노출한다.
-          sudo docker rm -f hello 2>/dev/null || true
-          sudo docker run -d \
-            --name hello \
-            --restart unless-stopped \
-            -p 80:8080 \
-            "$IMAGE"
-
-          # 4. 기동 확인 (최대 90초)
-          for i in $(seq 1 30); do
-            if curl -fsS -o /dev/null http://localhost/; then
-              echo "배포 성공 ($((i*3))초)"
-              sudo docker image prune -f
-              exit 0
-            fi
-            sleep 3
-          done
-
-          echo "ERROR: 90초 내에 응답이 없습니다. 컨테이너 로그:"
-          sudo docker logs --tail 100 hello
-          exit 1
+          # 4. 톰캣 기동
+          /opt/tomcat9/bin/startup.sh
