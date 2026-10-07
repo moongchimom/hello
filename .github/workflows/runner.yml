@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # 어떤 운영체제 버전에서 실행하는지 설정 cancel-timeout-minutes: cancel-timeout-minutes: 
+    runs-on: [self-hosted, kosa-label]  # 어떤 운영체제 버전에서 실행하는지 설정 cancel-timeout-minutes: cancel-timeout-minutes: 
 
     steps:
     - name: 소스 check out 
