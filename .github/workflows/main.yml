@@ -29,13 +29,13 @@ jobs:
     - name: 보안환경변수를 이용하여 개인키 파일생성
       run: |
         mkdir -p ~/.ssh
-        echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_rsa
+        echo "${{ secrets.EC2_EGOV_KEY }}" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
         
     - name: actions을 사용하여 보안환경변수를 이용하여 개인키 파일생성
       uses: webfactory/ssh-agent@v0.5.3
       with:
-        ssh-private-key: ${{ secrets.SERVER_SSH_KEY }}
+        ssh-private-key: ${{ secrets.EC2_EGOV_KEY }}
         
     - name: 서버연결시 지문등록
       run: ssh-keyscan -t ed25519 13.125.180.143 >> ~/.ssh/known_hosts
