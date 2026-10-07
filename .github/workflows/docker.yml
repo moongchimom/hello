@@ -7,7 +7,7 @@ on:
 
 #환경변수
 env:
-  SERVER_IP: 3.34.96.62
+  SERVER_IP: 13.125.246.213
 
 jobs:
   build:
