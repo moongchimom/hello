@@ -1,4 +1,4 @@
-name: docker 이미지 빌드 및 배포
+name: runner 이용
 
 on:
   push:
